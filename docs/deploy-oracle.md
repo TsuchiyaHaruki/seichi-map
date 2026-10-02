@@ -54,7 +54,7 @@ cd ../frontend && npm run lint && npm run typecheck && npm run test && npm run b
 
 ## 3. VM の作成（Oracle Cloud）
 
-1. Oracle Cloud に登録する。
+1. Oracle Cloud に登録する（https://www.oracle.com/jp/cloud/free/ ）。
    - クレジットカードによる本人確認が必要。Always Free の範囲内なら課金されない。
    - ホームリージョンはあとから変更できない。日本なら Tokyo か Osaka を選ぶ。
 2. 「コンピュート → インスタンス → インスタンスの作成」を開く。
