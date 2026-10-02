@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: seichi-backend
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:55432/seichi}
+    username: ${DATABASE_USERNAME:seichi}
+    password: ${DATABASE_PASSWORD:seichi_dev_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    locations: classpath:db/migration
+  jackson:
+    time-zone: UTC
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    # 本番では必ず環境変数 JWT_SECRET を設定する(未設定の場合は起動に失敗する)
+    secret: ${JWT_SECRET:}
+    expiration-minutes: 30
+    sliding-refresh-threshold-minutes: 15
+  cookie:
+    secure: ${COOKIE_SECURE:false}
+  cors:
+    frontend-origin: ${FRONTEND_ORIGIN:http://localhost:3000}
+  admin:
+    # 初期管理者アカウント(環境変数で指定した場合のみ起動時に作成)
+    user-name: ${ADMIN_USER_NAME:}
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+  upload:
+    # 聖地画像の保存先ローカルフォルダ(相対指定はbackendの作業ディレクトリ基準)
+    spot-images-dir: ${SPOT_IMAGE_DIR:./var/spot-images}
+    max-images-per-spot: 3
+    # 1枚あたり5MB(spring.servlet.multipart.max-file-sizeと揃える)
+    max-image-size-bytes: 5242880
+
+logging:
+  level:
+    com.seichi: INFO

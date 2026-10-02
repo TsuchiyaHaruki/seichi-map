@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: seichi-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-seichi}
+      POSTGRES_USER: ${POSTGRES_USER:-seichi}
+      # 開発用の既定値。本番では必ず環境変数で上書きする。
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-seichi_dev_password}
+    ports:
+      # ホスト側は55432(5432は他プロジェクトが使用しているため)
+      - "${POSTGRES_HOST_PORT:-55432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seichi} -d ${POSTGRES_DB:-seichi}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:

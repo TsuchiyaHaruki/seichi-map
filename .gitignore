@@ -1,0 +1,25 @@
+# 環境変数(秘密情報はGitへコミットしない)
+.env
+.env.local
+*.env
+
+# macOS
+.DS_Store
+
+# Backend
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+# 聖地画像の保存先(app.upload.spot-images-dir)
+backend/var/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/coverage/
+frontend/next-env.d.ts
+
+# IDE
+.idea/
+.vscode/
+*.iml

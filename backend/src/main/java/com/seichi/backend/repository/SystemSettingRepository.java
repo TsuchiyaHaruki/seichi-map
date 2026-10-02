@@ -1,0 +1,7 @@
+package com.seichi.backend.repository;
+
+import com.seichi.backend.entity.SystemSetting;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface SystemSettingRepository extends JpaRepository<SystemSetting, String> {
+}
