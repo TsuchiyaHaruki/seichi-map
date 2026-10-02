@@ -1,6 +1,7 @@
 # 環境変数(秘密情報はGitへコミットしない)
 .env
 .env.local
+.env.prod
 *.env
 
 # macOS
