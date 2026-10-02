@@ -1,5 +1,4 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+import { buildApiUrl } from "@/lib/api/url";
 
 let cachedToken: string | null = null;
 
@@ -16,7 +15,7 @@ export async function ensureCsrfToken(): Promise<string> {
   if (cachedToken) {
     return cachedToken;
   }
-  const response = await fetch(`${API_BASE_URL}/api/v1/auth/csrf`, {
+  const response = await fetch(buildApiUrl("/api/v1/auth/csrf"), {
     method: "GET",
     credentials: "include",
   });
