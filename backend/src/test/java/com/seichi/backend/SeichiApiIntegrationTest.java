@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * AGENTS.md §18 / AI_SPECIFICATION.md §21 のテストチェックリストを、
- * 実エンドポイント + 実PostgreSQL(Testcontainers)で検証する統合テスト。
+ * 実エンドポイント + 実PostgreSQL(compose の seichi_test)で検証する統合テスト。
  */
 class SeichiApiIntegrationTest extends AbstractIntegrationTest {
 
@@ -334,6 +334,46 @@ class SeichiApiIntegrationTest extends AbstractIntegrationTest {
                                 .content(SPOT_JSON))
                 .andReturn().getResponse().getStatus();
         assertThat(status).isEqualTo(403);
+    }
+
+    @Test
+    void ログイン中の認証済みGETでCSRFトークンが失効しない() throws Exception {
+        ApiTestClient user = registerAndLogin("csrf-keep@example.com");
+        String token = user.csrfToken();
+
+        // 一覧・詳細・マイページなど、認証済みのGETを挟んでもキャッシュしたトークンを使える
+        user.get("/api/v1/auth/me");
+        user.get("/api/v1/users/me/favorites");
+
+        int status = user.postWithCsrfToken("/api/v1/sacred-spots", SPOT_JSON, token)
+                .getResponse().getStatus();
+        assertThat(status).isEqualTo(201);
+    }
+
+    @Test
+    void ログインとログアウトでCSRFトークンが再生成される() throws Exception {
+        ApiTestClient client = newClient();
+        client.post("/api/v1/auth/register", """
+                {
+                  "userName": "テストユーザー",
+                  "email": "csrf-rotate@example.com",
+                  "password": "SecurePass123",
+                  "passwordConfirmation": "SecurePass123"
+                }
+                """);
+        String beforeLogin = client.csrfToken();
+        client.postWithCsrfToken("/api/v1/auth/login",
+                "{\"email\": \"csrf-rotate@example.com\", \"password\": \"SecurePass123\"}",
+                beforeLogin);
+        String afterLogin = client.csrfToken();
+        assertThat(afterLogin).isNotEqualTo(beforeLogin);
+
+        // ログイン前のトークンはログイン後に使えない
+        assertThat(client.postWithCsrfToken("/api/v1/sacred-spots", SPOT_JSON, beforeLogin)
+                .getResponse().getStatus()).isEqualTo(403);
+
+        client.postWithCsrfToken("/api/v1/auth/logout", null, afterLogin);
+        assertThat(client.csrfToken()).isNotEqualTo(afterLogin);
     }
 
     // --- ヘルパー -------------------------------------------------------------

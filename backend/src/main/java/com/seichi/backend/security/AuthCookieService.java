@@ -4,10 +4,12 @@ import java.time.Duration;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.stereotype.Service;
 
 import com.seichi.backend.config.AppProperties;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 @Service
@@ -16,9 +18,11 @@ public class AuthCookieService {
     public static final String ACCESS_TOKEN_COOKIE = "access_token";
 
     private final AppProperties properties;
+    private final CsrfTokenRepository csrfTokenRepository;
 
-    public AuthCookieService(AppProperties properties) {
+    public AuthCookieService(AppProperties properties, CsrfTokenRepository csrfTokenRepository) {
         this.properties = properties;
+        this.csrfTokenRepository = csrfTokenRepository;
     }
 
     public ResponseCookie createAccessTokenCookie(String token) {
@@ -47,5 +51,13 @@ public class AuthCookieService {
 
     public void clearAccessTokenCookie(HttpServletResponse response) {
         response.addHeader(HttpHeaders.SET_COOKIE, createLogoutCookie().toString());
+    }
+
+    /**
+     * ログイン・ログアウト時にCSRFトークン(XSRF-TOKEN Cookie)を破棄する。
+     * 次回の GET /auth/csrf で新しいトークンが生成される。
+     */
+    public void clearCsrfToken(HttpServletRequest request, HttpServletResponse response) {
+        csrfTokenRepository.saveToken(null, request, response);
     }
 }
