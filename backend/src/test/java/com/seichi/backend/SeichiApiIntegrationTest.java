@@ -376,6 +376,32 @@ class SeichiApiIntegrationTest extends AbstractIntegrationTest {
         assertThat(client.csrfToken()).isNotEqualTo(afterLogin);
     }
 
+    // --- エラー応答 ------------------------------------------------------------
+
+    @Test
+    void 対応していないHTTPメソッドは405を返す() throws Exception {
+        ApiTestClient admin = loginAsNewAdmin("method-admin@example.com");
+        var result = admin.post("/api/v1/admin/sacred-spots", SPOT_JSON);
+        assertThat(result.getResponse().getStatus()).isEqualTo(405);
+        assertThat(admin.json(result).get("code").asText()).isEqualTo("METHOD_NOT_ALLOWED");
+    }
+
+    @Test
+    void IDが数値でない場合は400を返す() throws Exception {
+        var result = newClient().get("/api/v1/sacred-spots/abc");
+        assertThat(result.getResponse().getStatus()).isEqualTo(400);
+        assertThat(newClient().json(result).get("code").asText()).isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    void 画像ファイルの指定がないアップロードは400を返す() throws Exception {
+        ApiTestClient user = registerAndLogin("missing-file@example.com");
+        long spotId = user.json(user.post("/api/v1/sacred-spots", SPOT_JSON)).get("id").asLong();
+        var result = user.upload("/api/v1/sacred-spots/" + spotId + "/images",
+                "wrong", "photo.png", "image/png", pngBytes());
+        assertThat(result.getResponse().getStatus()).isEqualTo(400);
+    }
+
     // --- ヘルパー -------------------------------------------------------------
 
     private ApiTestClient registerAndLogin(String email) throws Exception {
