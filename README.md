@@ -20,7 +20,9 @@ seichi/
 ├── frontend/   Next.js アプリ
 ├── backend/    Spring Boot アプリ
 ├── docs/       ドキュメント
-├── compose.yml PostgreSQL (開発用)
+├── deploy/     本番用リバースプロキシ設定 (Caddyfile)
+├── compose.yml      PostgreSQL (開発用)
+├── compose.prod.yml 本番用構成 (db / backend / frontend / caddy)
 └── AI_SPECIFICATION.md
 ```
 
@@ -70,7 +72,8 @@ http://localhost:3000 を開く。
 ## テスト
 
 ```bash
-# Backend(Testcontainersを使用するためDocker起動が必要)
+# Backend(統合テストは稼働中のcompose PostgreSQL上の専用DB seichi_test を使うため、先にDBを起動する)
+docker compose up -d db
 cd backend && ./mvnw test
 
 # Frontend
@@ -80,6 +83,15 @@ cd frontend && npm run lint && npm run typecheck && npm run test && npm run buil
 ## 補足
 
 - 認証: JWTはSpring Bootが発行し `access_token` HttpOnly Cookie(SameSite=Lax、30分、残り15分未満でスライディング更新)に保存。状態変更APIは `X-XSRF-TOKEN` ヘッダーによるCSRF対策必須。
-- 本番では `COOKIE_SECURE=true` とし、FrontendとBackendを同一サイト(同一ドメイン配下)で配信すること(SameSite Cookieの前提)。
+- 本番では `COOKIE_SECURE=true` とし、FrontendとBackendを同一オリジンで配信する(Caddyが `/api/*` をBackendへ転送し、Frontendは `NEXT_PUBLIC_API_BASE_URL` を空文字でビルドする)。
+
+## 本番デプロイ
+
+Oracle Cloud Always Free のVM 1台へ Docker Compose でデプロイする。手順は [docs/deploy-oracle.md](./docs/deploy-oracle.md) を参照。
+
+```bash
+cp .env.prod.example .env.prod   # 値を設定する(Gitへコミットしない)
+docker compose --env-file .env.prod -f compose.prod.yml up -d --build
+```
 - 地図用API(`GET /api/v1/sacred-spots/map`)は負荷対策として最大500件を返す。
 - 現在地はブラウザ内でのみ使用し、サーバーへ送信・保存しない。

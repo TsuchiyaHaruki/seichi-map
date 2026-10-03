@@ -1,8 +1,6 @@
 import type { ApiErrorBody } from "@/types/api";
 import { clearCsrfToken, ensureCsrfToken } from "@/lib/csrf";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+import { buildApiUrl, type SearchParams } from "@/lib/api/url";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -29,7 +27,7 @@ export class ApiError extends Error {
 
 /** 画像など、APIのURLを直接参照したいときに使う(imgのsrcなど) */
 export function apiUrl(path: string): string {
-  return `${API_BASE_URL}${path}`;
+  return buildApiUrl(path);
 }
 
 export interface ApiFetchOptions {
@@ -37,23 +35,8 @@ export interface ApiFetchOptions {
   /** FormDataを渡すとmultipart/form-dataで送信する(画像アップロード) */
   body?: unknown;
   /** undefined・空文字の値は送信しない */
-  searchParams?: Record<string, string | number | boolean | undefined>;
+  searchParams?: SearchParams;
   signal?: AbortSignal;
-}
-
-function buildUrl(
-  path: string,
-  searchParams?: Record<string, string | number | boolean | undefined>,
-): string {
-  const url = new URL(`${API_BASE_URL}${path}`);
-  if (searchParams) {
-    for (const [key, value] of Object.entries(searchParams)) {
-      if (value !== undefined && value !== "") {
-        url.searchParams.set(key, String(value));
-      }
-    }
-  }
-  return url.toString();
 }
 
 async function parseError(response: Response): Promise<ApiError> {
@@ -98,7 +81,7 @@ async function doFetch(
 
   let response: Response;
   try {
-    response = await fetch(buildUrl(path, options.searchParams), {
+    response = await fetch(buildApiUrl(path, options.searchParams), {
       method,
       headers,
       body,

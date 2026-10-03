@@ -1,0 +1,17 @@
+# 本番用リバースプロキシ。DOMAIN の証明書(Let's Encrypt)の取得・更新とHTTP→HTTPSリダイレクトはCaddyが自動で行う。
+{$DOMAIN} {
+	encode zstd gzip
+
+	# API(Spring Boot)。画像アップロード(1枚5MB)を通しつつ過大なリクエストを入口で拒否する
+	handle /api/* {
+		request_body {
+			max_size 10MB
+		}
+		reverse_proxy backend:8080
+	}
+
+	# 画面(Next.js)
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
