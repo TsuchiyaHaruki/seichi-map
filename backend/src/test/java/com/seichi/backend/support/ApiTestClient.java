@@ -40,6 +40,18 @@ public class ApiTestClient {
         return exchange(MockMvcRequestBuilders.post(path), true, jsonBody);
     }
 
+    /**
+     * 取得済みのCSRFトークンを使い回してPOSTする(Frontendはトークンをキャッシュして再利用する)。
+     */
+    public MvcResult postWithCsrfToken(String path, String jsonBody, String csrfToken) throws Exception {
+        return exchange(MockMvcRequestBuilders.post(path), csrfToken, jsonBody);
+    }
+
+    /** GET /auth/csrf でトークンを取得する(Frontendの ensureCsrfToken 相当)。 */
+    public String csrfToken() throws Exception {
+        return ensureCsrfToken();
+    }
+
     public MvcResult put(String path, String jsonBody) throws Exception {
         return exchange(MockMvcRequestBuilders.put(path), true, jsonBody);
     }
@@ -71,8 +83,14 @@ public class ApiTestClient {
                               boolean mutating,
                               String jsonBody) throws Exception {
         // 状態変更時は先にCSRFトークンを取得(Cookieジャーが更新される)。
-        if (mutating) {
-            builder.header("X-XSRF-TOKEN", ensureCsrfToken());
+        return exchange(builder, mutating ? ensureCsrfToken() : null, jsonBody);
+    }
+
+    private MvcResult exchange(MockHttpServletRequestBuilder builder,
+                              String csrfToken,
+                              String jsonBody) throws Exception {
+        if (csrfToken != null) {
+            builder.header("X-XSRF-TOKEN", csrfToken);
         }
         // Cookieはここで一度だけ付与する(二重付与すると回転前後のトークンが混在する)。
         List<Cookie> cookies = new ArrayList<>(cookieJar.values());

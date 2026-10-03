@@ -20,6 +20,7 @@ import com.seichi.backend.security.AuthCookieService;
 import com.seichi.backend.security.SeichiUserPrincipal;
 import com.seichi.backend.service.AuthService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
@@ -44,17 +45,20 @@ public class AuthController {
 
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request,
+                               HttpServletRequest httpRequest,
                                HttpServletResponse response) {
         AuthService.LoginResult result = authService.login(request);
         authCookieService.addAccessTokenCookie(response, result.token());
+        authCookieService.clearCsrfToken(httpRequest, response);
         return new LoginResponse(true, result.user());
     }
 
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void logout(HttpServletResponse response) {
+    public void logout(HttpServletRequest request, HttpServletResponse response) {
         // permitAll: 未ログインでも204でCookieを削除する
         authCookieService.clearAccessTokenCookie(response);
+        authCookieService.clearCsrfToken(request, response);
     }
 
     @GetMapping("/me")

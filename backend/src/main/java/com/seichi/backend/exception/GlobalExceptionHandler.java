@@ -2,12 +2,18 @@ package com.seichi.backend.exception;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -50,6 +56,37 @@ public class GlobalExceptionHandler {
                 "リクエストの形式が正しくありません。",
                 request.getRequestURI());
         return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler({
+            MethodArgumentTypeMismatchException.class,
+            MissingServletRequestParameterException.class,
+            MissingServletRequestPartException.class})
+    public ResponseEntity<ErrorResponse> handleBadRequestParameter(Exception ex,
+                                                                   HttpServletRequest request) {
+        // パスの型不一致(/sacred-spots/abc)や必須パラメーター・ファイルの欠落
+        ErrorResponse body = ErrorResponse.of(
+                HttpStatus.BAD_REQUEST.value(),
+                "VALIDATION_ERROR",
+                "リクエストの形式が正しくありません。",
+                request.getRequestURI());
+        return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex,
+                                                                  HttpServletRequest request) {
+        ErrorResponse body = ErrorResponse.of(
+                HttpStatus.METHOD_NOT_ALLOWED.value(),
+                "METHOD_NOT_ALLOWED",
+                "このHTTPメソッドには対応していません。",
+                request.getRequestURI());
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED);
+        Set<HttpMethod> supported = ex.getSupportedHttpMethods();
+        if (supported != null) {
+            builder.allow(supported.toArray(new HttpMethod[0]));
+        }
+        return builder.body(body);
     }
 
     @ExceptionHandler(AuthFailureException.class)
