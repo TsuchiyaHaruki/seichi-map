@@ -82,14 +82,26 @@ cd ../frontend && npm run lint && npm run typecheck && npm run test && npm run b
 
 Oracle の Ubuntu イメージは、初期状態で iptables が 22 番以外をすべて拒否する。
 
+iptables は上から順に判定するため、許可ルールは `REJECT` の行より上に挿入する必要がある。`REJECT` の位置はイメージによって異なるので、先に行番号を確認する。
+
 ```bash
 ssh ubuntu@<パブリックIP>
 
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p udp --dport 443 -j ACCEPT
+# REJECT の行番号(num)を確認する(例: 5)
+sudo iptables -L INPUT -n --line-numbers
+
+# REJECT の行番号を指定して、その上に挿入する
+N=5   # 確認した REJECT の行番号
+sudo iptables -I INPUT $N -m state --state NEW -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT $N -m state --state NEW -p tcp --dport 443 -j ACCEPT
+sudo iptables -I INPUT $N -m state --state NEW -p udp --dport 443 -j ACCEPT
 sudo netfilter-persistent save
+
+# 80/443 の ACCEPT が REJECT より上にあることを確認する
+sudo iptables -L INPUT -n --line-numbers
 ```
+
+Minimal イメージなどで `netfilter-persistent` がない場合は、先に `sudo apt update && sudo apt install -y iptables-persistent` を実行する。
 
 ## 5. Docker のインストール
 
