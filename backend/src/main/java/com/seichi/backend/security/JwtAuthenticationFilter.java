@@ -15,6 +15,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.WebUtils;
 
 import com.seichi.backend.config.AppProperties;
+import com.seichi.backend.entity.User;
+import com.seichi.backend.repository.UserRepository;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -29,13 +31,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final AuthCookieService authCookieService;
+    private final UserRepository userRepository;
     private final Duration slidingRefreshThreshold;
 
     public JwtAuthenticationFilter(JwtService jwtService,
                                    AuthCookieService authCookieService,
+                                   UserRepository userRepository,
                                    AppProperties properties) {
         this.jwtService = jwtService;
         this.authCookieService = authCookieService;
+        this.userRepository = userRepository;
         this.slidingRefreshThreshold =
                 Duration.ofMinutes(properties.jwt().slidingRefreshThresholdMinutes());
     }
@@ -50,8 +55,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 Claims claims = jwtService.parseClaims(cookie.getValue());
                 Long userId = Long.valueOf(claims.getSubject());
-                String email = claims.get("email", String.class);
-                String role = claims.get("role", String.class);
+
+                // 無効化・削除・ロール変更を即時に反映するため、トークンの内容ではなくDBの現在の状態で判定する
+                User user = userRepository.findById(userId).orElse(null);
+                if (user == null || !user.isEnabled()) {
+                    authCookieService.clearAccessTokenCookie(response);
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+                String email = user.getEmail();
+                String role = user.getRole().name();
 
                 SeichiUserPrincipal principal = new SeichiUserPrincipal(userId, email, role);
                 UsernamePasswordAuthenticationToken authentication =

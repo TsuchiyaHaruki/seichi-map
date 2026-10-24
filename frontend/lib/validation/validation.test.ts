@@ -50,6 +50,25 @@ describe("validateRegisterForm", () => {
     ).toBeDefined();
   });
 
+  it("パスワードはUTF-8で72バイト以内", () => {
+    const tooLong = "あ".repeat(25); // 75バイト
+    expect(
+      validateRegisterForm({
+        ...valid,
+        password: tooLong,
+        passwordConfirmation: tooLong,
+      }).password,
+    ).toBeDefined();
+    const maxLength = "a".repeat(72);
+    expect(
+      validateRegisterForm({
+        ...valid,
+        password: maxLength,
+        passwordConfirmation: maxLength,
+      }).password,
+    ).toBeUndefined();
+  });
+
   it("確認用パスワードの不一致を検出する", () => {
     expect(
       validateRegisterForm({ ...valid, passwordConfirmation: "different" })
