@@ -2,6 +2,19 @@
 {$DOMAIN} {
 	encode zstd gzip
 
+	# セキュリティヘッダー(画面・APIの全レスポンスに付与する)
+	header {
+		# 以後はHTTPSでのみ接続させる(初回のhttp://アクセスを狙った盗聴・改ざん対策)
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		# 他サイトのiframeへの埋め込みを禁止する(クリックジャッキング対策)
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(self)"
+		-Server
+	}
+
 	# API(Spring Boot)。画像アップロード(1枚5MB)を通しつつ過大なリクエストを入口で拒否する
 	handle /api/* {
 		request_body {
