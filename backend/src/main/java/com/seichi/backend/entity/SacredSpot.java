@@ -231,6 +231,14 @@ public class SacredSpot {
         this.verifiedAt = verifiedAt;
     }
 
+    /** USERによる変更後、管理者の再確認待ち(PENDING)へ戻し、確認・却下の情報をクリアする */
+    public void returnToPendingReview() {
+        this.verificationStatus = VerificationStatus.PENDING;
+        this.verifiedBy = null;
+        this.verifiedAt = null;
+        this.rejectionReason = null;
+    }
+
     public String getRejectionReason() {
         return rejectionReason;
     }

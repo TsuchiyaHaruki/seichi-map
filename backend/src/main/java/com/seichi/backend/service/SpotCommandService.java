@@ -75,10 +75,7 @@ public class SpotCommandService {
         }
         applyRequest(spot, request);
         if (!admin) {
-            spot.setVerificationStatus(VerificationStatus.PENDING);
-            spot.setVerifiedBy(null);
-            spot.setVerifiedAt(null);
-            spot.setRejectionReason(null);
+            spot.returnToPendingReview();
         }
         sacredSpotRepository.save(spot);
         return detailOf(id, principal);
