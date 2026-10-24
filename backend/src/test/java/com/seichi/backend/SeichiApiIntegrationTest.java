@@ -1,5 +1,13 @@
 package com.seichi.backend;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -7,6 +15,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.seichi.backend.entity.User;
 import com.seichi.backend.enums.Role;
+import com.seichi.backend.enums.VerificationStatus;
+import com.seichi.backend.repository.SacredSpotRepository;
 import com.seichi.backend.repository.UserRepository;
 import com.seichi.backend.support.ApiTestClient;
 
@@ -37,6 +47,9 @@ class SeichiApiIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private SacredSpotRepository sacredSpotRepository;
 
     // --- 認証・権限 -----------------------------------------------------------
 
@@ -284,8 +297,10 @@ class SeichiApiIntegrationTest extends AbstractIntegrationTest {
             JsonNode body = attacker.json(attacker.post("/api/v1/auth/login", wrongLogin));
             assertThat(body.get("code").asText()).isEqualTo("AUTHENTICATION_FAILED");
         }
+        // ロックした回も、誤ったパスワードではロック状態を明かさない(アカウントの存在確認を防ぐ)
         JsonNode fifth = attacker.json(attacker.post("/api/v1/auth/login", wrongLogin));
-        assertThat(fifth.get("code").asText()).isEqualTo("ACCOUNT_LOCKED");
+        assertThat(fifth.get("code").asText()).isEqualTo("AUTHENTICATION_FAILED");
+        assertThat(userRepository.findByEmail(email).orElseThrow().isLocked()).isTrue();
 
         // 正しいパスワードでもロック中は拒否
         JsonNode correct = attacker.json(attacker.post("/api/v1/auth/login",
@@ -307,6 +322,136 @@ class SeichiApiIntegrationTest extends AbstractIntegrationTest {
         JsonNode relogin = newClient().json(newClient().post("/api/v1/auth/login",
                 "{\"email\": \"" + email + "\", \"password\": \"SecurePass123\"}"));
         assertThat(relogin.get("authenticated").asBoolean()).isTrue();
+    }
+
+    @Test
+    void 同時に送られたログイン失敗も回数を正しく数える() throws Exception {
+        String email = "concurrent-lock@example.com";
+        registerAndLogin(email);
+        String wrongLogin = "{\"email\": \"" + email + "\", \"password\": \"WrongPass000\"}";
+
+        int parallel = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(parallel);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<Integer>> results = new ArrayList<>();
+            for (int i = 0; i < parallel; i++) {
+                ApiTestClient attacker = newClient();
+                attacker.csrfToken();
+                results.add(executor.submit(() -> {
+                    start.await();
+                    return attacker.post("/api/v1/auth/login", wrongLogin).getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            for (Future<Integer> result : results) {
+                assertThat(result.get()).isEqualTo(401);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+        assertThat(userRepository.findByEmail(email).orElseThrow().getFailedAttempts()).isEqualTo(parallel);
+    }
+
+    @Test
+    void 無効化やロック中でも誤ったパスワードでは状態を明かさない() throws Exception {
+        String email = "disabled-state@example.com";
+        registerAndLogin(email);
+        User user = userRepository.findByEmail(email).orElseThrow();
+        user.setEnabled(false);
+        userRepository.save(user);
+
+        JsonNode wrong = newClient().json(newClient().post("/api/v1/auth/login",
+                "{\"email\": \"" + email + "\", \"password\": \"WrongPass000\"}"));
+        assertThat(wrong.get("code").asText()).isEqualTo("AUTHENTICATION_FAILED");
+
+        JsonNode unknown = newClient().json(newClient().post("/api/v1/auth/login",
+                "{\"email\": \"nobody@example.com\", \"password\": \"WrongPass000\"}"));
+        assertThat(unknown.get("code").asText()).isEqualTo("AUTHENTICATION_FAILED");
+
+        JsonNode correct = newClient().json(newClient().post("/api/v1/auth/login",
+                "{\"email\": \"" + email + "\", \"password\": \"SecurePass123\"}"));
+        assertThat(correct.get("code").asText()).isEqualTo("ACCOUNT_DISABLED");
+    }
+
+    @Test
+    void 七十二バイトを超えるパスワードは500にならない() throws Exception {
+        // 全角25文字 = UTF-8で75バイト(文字数の下限8は満たす)
+        String longPassword = "あ".repeat(25);
+        assertThat(longPassword.getBytes(StandardCharsets.UTF_8).length).isGreaterThan(72);
+
+        var register = newClient().post("/api/v1/auth/register", """
+                {
+                  "userName": "テストユーザー",
+                  "email": "long-password@example.com",
+                  "password": "%s",
+                  "passwordConfirmation": "%s"
+                }
+                """.formatted(longPassword, longPassword));
+        assertThat(register.getResponse().getStatus()).isEqualTo(400);
+
+        registerAndLogin("long-login@example.com");
+        var login = newClient().post("/api/v1/auth/login",
+                "{\"email\": \"long-login@example.com\", \"password\": \"" + longPassword + "\"}");
+        assertThat(login.getResponse().getStatus()).isEqualTo(401);
+    }
+
+    // --- 発行済みJWTの扱い -----------------------------------------------------
+
+    @Test
+    void 無効化されたユーザーは発行済みのJWTで保護APIを使えない() throws Exception {
+        String email = "disable-after-login@example.com";
+        ApiTestClient user = registerAndLogin(email);
+        assertThat(user.get("/api/v1/auth/me").getResponse().getStatus()).isEqualTo(200);
+
+        long userId = userRepository.findByEmail(email).orElseThrow().getId();
+        ApiTestClient admin = loginAsNewAdmin("admin-disable@example.com");
+        assertThat(admin.patch("/api/v1/admin/users/" + userId + "/enabled", "{\"enabled\": false}")
+                .getResponse().getStatus()).isEqualTo(200);
+
+        assertThat(user.get("/api/v1/auth/me").getResponse().getStatus()).isEqualTo(401);
+        assertThat(user.post("/api/v1/sacred-spots", SPOT_JSON).getResponse().getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void 権限はJWTではなくDBのロールで判定する() throws Exception {
+        String email = "demoted-admin@example.com";
+        ApiTestClient admin = loginAsNewAdmin(email);
+        assertThat(admin.get("/api/v1/admin/users").getResponse().getStatus()).isEqualTo(200);
+
+        User user = userRepository.findByEmail(email).orElseThrow();
+        user.setRole(Role.USER);
+        userRepository.save(user);
+
+        assertThat(admin.get("/api/v1/admin/users").getResponse().getStatus()).isEqualTo(403);
+    }
+
+    // --- 承認済み投稿の画像変更 -------------------------------------------------
+
+    @Test
+    void USERが承認済み投稿の画像を変更するとPENDINGに戻り非公開になる() throws Exception {
+        ApiTestClient owner = registerAndLogin("verified-image-owner@example.com");
+        long spotId = owner.json(owner.post("/api/v1/sacred-spots", SPOT_JSON)).get("id").asLong();
+        ApiTestClient admin = loginAsNewAdmin("admin-verified-image@example.com");
+        admin.patch("/api/v1/admin/sacred-spots/" + spotId + "/verify", null);
+        String imagesPath = "/api/v1/sacred-spots/" + spotId + "/images";
+
+        // ADMINの画像追加では承認状態を維持する
+        long adminImageId = admin.json(admin.upload(imagesPath, "file", "a.png", "image/png", pngBytes()))
+                .get("id").asLong();
+        assertThat(statusOf(spotId)).isEqualTo(VerificationStatus.VERIFIED);
+
+        // USERの画像追加でPENDINGへ戻り、確認情報もクリアされて一般公開されなくなる
+        assertThat(owner.upload(imagesPath, "file", "b.png", "image/png", pngBytes())
+                .getResponse().getStatus()).isEqualTo(201);
+        assertThat(statusOf(spotId)).isEqualTo(VerificationStatus.PENDING);
+        assertThat(sacredSpotRepository.findById(spotId).orElseThrow().getVerifiedBy()).isNull();
+        assertThat(newClient().get("/api/v1/sacred-spots/" + spotId).getResponse().getStatus()).isEqualTo(404);
+
+        // 再承認後、USERの画像削除でも同様にPENDINGへ戻る
+        admin.patch("/api/v1/admin/sacred-spots/" + spotId + "/verify", null);
+        assertThat(owner.delete(imagesPath + "/" + adminImageId).getResponse().getStatus()).isEqualTo(204);
+        assertThat(statusOf(spotId)).isEqualTo(VerificationStatus.PENDING);
     }
 
     // --- 個人情報保護 ---------------------------------------------------------
@@ -403,6 +548,10 @@ class SeichiApiIntegrationTest extends AbstractIntegrationTest {
     }
 
     // --- ヘルパー -------------------------------------------------------------
+
+    private VerificationStatus statusOf(long spotId) {
+        return sacredSpotRepository.findById(spotId).orElseThrow().getVerificationStatus();
+    }
 
     private ApiTestClient registerAndLogin(String email) throws Exception {
         ApiTestClient client = newClient();

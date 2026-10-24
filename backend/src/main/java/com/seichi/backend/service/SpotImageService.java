@@ -81,7 +81,9 @@ public class SpotImageService {
         image.setSizeBytes(file.getSize());
         image.setSortOrder((int) spotImageRepository.countBySpotId(spotId));
         image.setCreatedBy(principal.id());
-        return toResponse(spotImageRepository.save(image));
+        SpotImageResponse response = toResponse(spotImageRepository.save(image));
+        returnToPendingIfEditedByUser(spot, principal);
+        return response;
     }
 
     /** 画像一覧(閲覧範囲は聖地詳細と同じ) */
@@ -114,6 +116,7 @@ public class SpotImageService {
                 .orElseThrow(NotFoundException::new);
         spotImageRepository.delete(image);
         storage.delete(image.getStoredName());
+        returnToPendingIfEditedByUser(spot, principal);
     }
 
     /**
@@ -134,6 +137,14 @@ public class SpotImageService {
         if (principal == null
                 || (!isAdmin(principal) && !spot.getCreatedBy().equals(principal.id()))) {
             throw new NotFoundException();
+        }
+    }
+
+    /** 画像の変更も投稿の編集とみなし、USERが変更した場合は管理者の再確認待ちへ戻す(ADMINは状態維持) */
+    private void returnToPendingIfEditedByUser(SacredSpot spot, SeichiUserPrincipal principal) {
+        if (!isAdmin(principal)) {
+            spot.returnToPendingReview();
+            sacredSpotRepository.save(spot);
         }
     }
 

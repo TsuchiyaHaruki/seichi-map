@@ -5,6 +5,9 @@ export type ValidationErrors = Record<string, string>;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** パスワードの上限(UTF-8で72バイト。Backendのハッシュ化方式の制約に合わせる) */
+const MAX_PASSWORD_BYTES = 72;
+
 /** ユーザー登録フォームの検証(AI_SPECIFICATION.md §19) */
 export function validateRegisterForm(
   values: RegisterRequest,
@@ -30,6 +33,9 @@ export function validateRegisterForm(
     errors.password = "パスワードは必須です。";
   } else if (values.password.length < 8) {
     errors.password = "パスワードは8文字以上で入力してください。";
+  } else if (new TextEncoder().encode(values.password).length > MAX_PASSWORD_BYTES) {
+    errors.password =
+      "パスワードが長すぎます。全角は24文字、半角は72文字以内で入力してください。";
   }
 
   if (values.passwordConfirmation !== values.password) {

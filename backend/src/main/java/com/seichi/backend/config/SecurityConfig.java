@@ -86,7 +86,12 @@ public class SecurityConfig {
 
     @Bean
     public CsrfTokenRepository csrfTokenRepository() {
-        return CookieCsrfTokenRepository.withHttpOnlyFalse();
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        // リバースプロキシの後ろではrequest.isSecure()がfalseになるため、JWTのCookieと同じ設定でSecureを付ける
+        repository.setCookieCustomizer(cookie -> cookie
+                .secure(properties.cookie().secure())
+                .sameSite("Lax"));
+        return repository;
     }
 
     @Bean
