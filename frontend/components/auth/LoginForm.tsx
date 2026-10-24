@@ -5,19 +5,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { login } from "@/lib/auth";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 import { ApiError } from "@/lib/api/client";
 import { validateLoginForm, type ValidationErrors } from "@/lib/validation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
-
-/** オープンリダイレクト防止: サイト内パスのみ許可する */
-function safeRedirectPath(redirect: string | null): string {
-  if (redirect && redirect.startsWith("/") && !redirect.startsWith("//")) {
-    return redirect;
-  }
-  return "/";
-}
 
 export function LoginForm() {
   const router = useRouter();
